@@ -12,6 +12,24 @@ secrets = get_secrets()
 ALPHA_URL = "https://www.alphavantage.co/query"
 FINNHUB_URL = "https://finnhub.io/api/v1"
 
+# ADD this helper near the top (after imports/constants)
+def resolve_yf_symbol(symbol: str) -> Optional[str]:
+    """Try common Yahoo suffixes and return the first that has data."""
+    candidates = [symbol, f"{symbol}.NS", f"{symbol}.BO", f"{symbol}.BSE", f"{symbol}.NSE"]
+    seen = set()
+    for cand in candidates:
+        if cand in seen: 
+            continue
+        seen.add(cand)
+        try:
+            t = yf.Ticker(cand)
+            df = t.history(period="5d", interval="1d")
+            if not df.empty:
+                return cand
+        except Exception:
+            continue
+    return None
+
 # ---------- Simple retry wrapper ----------
 
 def _get_with_retry(url: str, params: Dict, max_tries: int = 3, backoff: float = 1.5):
@@ -60,9 +78,11 @@ def company_overview_alpha(symbol: str) -> Dict:
 
 # ---------- Yahoo Finance for price history (no key) ----------
 
+# UPDATE get_history_yf to use the resolver
 def get_history_yf(symbol: str, period: str = "1y", interval: str = "1d") -> pd.DataFrame:
     try:
-        t = yf.Ticker(symbol)
+        sym = resolve_yf_symbol(symbol) or symbol
+        t = yf.Ticker(sym)
         df = t.history(period=period, interval=interval, auto_adjust=False)
         if not df.empty:
             df = df.reset_index()
@@ -72,12 +92,20 @@ def get_history_yf(symbol: str, period: str = "1y", interval: str = "1d") -> pd.
         return pd.DataFrame()
 
 
+# REPLACE get_fast_info with a safer version (avoids KeyError: 'currency')
 def get_fast_info(symbol: str) -> Dict:
     try:
-        t = yf.Ticker(symbol)
-        # fast_info is lightweight; may miss some fields depending on ticker
-        fi = getattr(t, "fast_info", {}) or {}
-        return dict(fi)
+        sym = resolve_yf_symbol(symbol) or symbol
+        t = yf.Ticker(sym)
+        fi = getattr(t, "fast_info", None)
+
+        out = {}
+        for k in ("last_price", "previous_close", "market_cap"):
+            try:
+                out[k] = getattr(fi, k) if fi is not None else None
+            except Exception:
+                out[k] = None
+        return out
     except Exception:
         logger.exception("yfinance fast_info failed")
         return {}
