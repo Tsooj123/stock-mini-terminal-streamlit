@@ -1,8 +1,7 @@
 import streamlit as st
 import pandas as pd
 import altair as alt
-from app.utils import kformat
-
+from app.utils import kformat, currency_prefix
 
 def price_chart(df: pd.DataFrame, symbol: str):
     if df.empty:
@@ -17,11 +16,14 @@ def price_chart(df: pd.DataFrame, symbol: str):
     st.altair_chart(chart, use_container_width=True)
 
 
-def kpi_row(price: float | None, change: float | None, mcap: float | None):
+def kpi_row(price: float | None, change: float | None, mcap: float | None, currency_code: str | None = None):
+    sym = currency_prefix(currency_code)
     c1, c2, c3 = st.columns(3)
     with c1:
-        st.metric("Price", f"{price:,.2f}" if price is not None else "-", delta=f"{change:+.2f}%" if change is not None else None)
+        val = f"{sym}{price:,.2f}" if price is not None else "-"
+        delta = f"{change:+.2f}%" if change is not None else None
+        st.metric("Price", val, delta=delta)
     with c2:
-        st.metric("Market Cap", kformat(mcap) if mcap is not None else "-")
+        st.metric("Market Cap", f"{sym}{kformat(mcap)}" if mcap is not None else "-")
     with c3:
         st.metric("52W Range", "see Fundamentals tab →")

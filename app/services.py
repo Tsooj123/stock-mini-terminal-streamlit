@@ -100,16 +100,17 @@ def search_symbol_yahoo(query: str) -> list[dict]:
     return []
 
 def resolve_symbol_variants(raw: str) -> list[str]:
-    s = raw.upper()
-    return [s, f"{s}.NS", f"{s}.BO", f"{s}.NSE", f"{s}.BSE"]
+    s = (raw or "").upper()
+    if "." in s:        # user/provider already gave exchange suffix
+        return [s]
+    return [s, f"{s}.NS", f"{s}.BO"]  # only try NSE/BSE, keep it short
 
 def resolve_yf_symbol(symbol: str) -> Optional[str]:
     for cand in resolve_symbol_variants(symbol):
         try:
-            if not cand:
-                continue
             t = yf.Ticker(cand)
-            df = t.history(period="5d", interval="1d")
+            # tiny, quiet probe: 2 days history; don't log empties
+            df = t.history(period="2d", interval="1d")
             if not df.empty:
                 return cand
         except Exception:

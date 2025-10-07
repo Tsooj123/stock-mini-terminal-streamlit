@@ -3,6 +3,13 @@ from functools import lru_cache
 from typing import Any, Dict
 import streamlit as st
 
+CURRENCY_SYMBOLS = {
+    "USD": "$", "INR": "₹", "EUR": "€", "GBP": "£", "JPY": "¥", "CNY": "¥",
+    "CAD": "$", "AUD": "$", "CHF": "Fr", "HKD": "$", "SGD": "$"
+}
+
+def currency_prefix(code: str | None) -> str:
+    return CURRENCY_SYMBOLS.get((code or "").upper(), "")
 
 # ---------- Logging ----------
 

@@ -25,6 +25,17 @@ secrets = get_secrets()
 
 st.set_page_config(page_title="Stock Mini Terminal", page_icon="📈", layout="wide")
 
+if st.session_state.get("flash_msg"):
+    st.toast(st.session_state.pop("flash_msg"))
+    
+def add_to_watchlist(sym: str):
+    wl = st.session_state.get("watchlist", [])
+    if sym and sym not in wl:
+        wl = wl + [sym]           # avoid in-place mutation edge cases
+        st.session_state.watchlist = wl
+        st.session_state["flash_msg"] = f"Added {sym} to watchlist"
+    st.rerun()  # immediately rerun so the watchlist above updates
+
 # --------------- Sidebar ---------------
 st.sidebar.image("assets/placeholder.png", width="stretch")
 st.sidebar.header("Settings")
@@ -63,18 +74,18 @@ with col_left:
     if results:
         # Filter to symbols that actually have Yahoo price data
         options, sym_map = [], {}
-        for m in results or []:
-            raw_sym = (m.get("1. symbol") or "").upper()
-            if resolve_yf_symbol(raw_sym):
-                label = f"{raw_sym} — {m.get('2. name','')} ({m.get('4. region','')})"
-                options.append(label); sym_map[label] = raw_sym  # keep the raw symbol for Alpha/Finnhub; we'll resolve for yfinance later
-
-        if options:
-            choice = st.selectbox("Select a match", options)
-            symbol = sym_map.get(choice)
-        else:
+        for m in results:
+            raw = (m.get("1. symbol") or "").upper()
+            name = m.get("2. name") or ""
+            region = m.get("4. region") or ""
+            label = f"{raw} — {name} ({region})"
+            options.append(label); sym_map[label] = raw
+        choice = st.selectbox("Select a match", options)
+        symbol = sym_map.get(choice)
+        # If the chosen symbol contains spaces or weird chars, guard quickly
+        if symbol and not symbol.replace(".", "").isalnum():
+            st.warning("That symbol looks invalid. Try another.")
             symbol = None
-            st.warning("No symbols with valid price data were found. Try another query.")
     else:
         symbol = None
         if q:
@@ -96,61 +107,73 @@ if symbol:
     # -------- Overview Tab --------
     with tabs[0]:
         with st.spinner("Loading overview..."):
-            df = get_history_yf(symbol, period=period, interval=interval)
-            fast = get_fast_info(symbol)
+            resolved = resolve_yf_symbol(symbol) or symbol
+            df = get_history_yf(resolved, period=period, interval=interval)
+            fast = get_fast_info(resolved)
+
+            # currency (from yfinance fast_info if available; fallback later)
+            currency = (fast.get("currency") if isinstance(fast, dict) else None) or "USD"
 
             last_price = fast.get("last_price") if fast else (df["Close"].iloc[-1] if not df.empty else None)
             prev_close = fast.get("previous_close") if fast else (df["Close"].iloc[-2] if len(df) > 1 else None)
-            change = None
-            if last_price is not None and prev_close not in (None, 0):
-                change = ((last_price - prev_close) / prev_close) * 100
+            change = ((last_price - prev_close) / prev_close) * 100 if (last_price is not None and prev_close) else None
+            mcap = fast.get("market_cap")
 
-            mcap = fast.get("market_cap", None)
-            kpi_row(last_price, change, mcap)
-            price_chart(df, symbol)
+            kpi_row(last_price, change, mcap, currency)  # <-- pass currency now
+            price_chart(df, resolved)
 
-            # Show which Yahoo ticker was used
-            try:
-                resolved = resolve_yf_symbol(symbol)
-                if resolved and resolved != symbol:
-                    st.caption(f"Resolved Yahoo symbol: **{resolved}**")
-            except Exception:
-                pass
+            if resolved != symbol:
+                st.caption(f"Resolved Yahoo symbol: **{resolved}**")
 
-            add_col1, add_col2 = st.columns(2)
-            with add_col1:
-                if st.button("➕ Add to watchlist"):
-                    if symbol not in st.session_state.watchlist:
-                        st.session_state.watchlist.append(symbol)
-                        st.success(f"Added {symbol} to watchlist")
-                        st.balloons()
-            with add_col2:
+            c1, c2 = st.columns(2)
+            with c1:
+                st.button(
+                    "➕ Add to watchlist",
+                    key=f"add_{symbol}",
+                    on_click=add_to_watchlist,
+                    args=(symbol,),
+                )
+            with c2:
                 if not df.empty:
-                    csv = df.to_csv(index=False).encode("utf-8")
-                    st.download_button("⬇️ Download price CSV", csv, file_name=f"{symbol}_{period}_{interval}.csv", mime="text/csv")
+                    st.download_button(
+                        "⬇️ Download price CSV",
+                        df.to_csv(index=False).encode("utf-8"),
+                        file_name=f"{resolved}_{period}_{interval}.csv",
+                        mime="text/csv",
+                    )
 
     # -------- Fundamentals Tab --------
     with tabs[1]:
         with st.spinner("Loading fundamentals..."):
-            ov  = company_overview_alpha(symbol)         # Alpha Vantage (may be empty/rate-limited)
-            fmp = company_profile_fmp(symbol)            # FMP fallback/primary
+            ov = company_overview_alpha(symbol)  # may be {} or rate-limited
+            fmp = company_profile_fmp(symbol)    # if you added FMP; else keep Finnhub
 
-            if not ov and not fmp:
+            # consider AV meaningful only if any of these keys are non-empty
+            av_keys = ("Name","Sector","Industry","MarketCapitalization","PERatio","EPS","DividendYield","ProfitMargin","ReturnOnEquityTTM")
+            av_has_data = any(ov.get(k) not in (None, "", "None") for k in av_keys) if ov else False
+
+            if not av_has_data and not fmp:
                 st.info("No fundamentals available for this symbol (provider limits/exchange coverage).")
             else:
-                colA, colB = st.columns(2)
+                cols = st.columns(2)
 
-                with colA:
-                    st.subheader("Funder: Alpha Vantage — Company Overview")
-                    if ov:
-                        for k in ("Name","Sector","Industry","MarketCapitalization","DividendYield","PERatio","EPS","ProfitMargin","ReturnOnEquityTTM"):
-                            st.write(f"**{k}:** {ov.get(k) or '-'}")
-                    else:
-                        st.caption("(Alpha Vantage unavailable)")
+                # Alpha Vantage (only if has data)
+                if av_has_data:
+                    with cols[0]:
+                        st.subheader("Source: Alpha Vantage — Company Overview")
+                        for k in av_keys:
+                            v = ov.get(k)
+                            if v not in (None, "", "None"):
+                                st.write(f"**{k}:** {v}")
+                else:
+                    with cols[0]:
+                        st.subheader("Source: Alpha Vantage")
+                        st.caption("(No usable data for this ticker)")
 
-                with colB:
-                    st.subheader("Funder: FMP — Company Profile")
-                    if fmp:
+                # FMP profile (only if present)
+                if fmp:
+                    with cols[1]:
+                        st.subheader("Source: FMP — Company Profile")
                         fields = {
                             "companyName": fmp.get("companyName"),
                             "exchange": fmp.get("exchangeFullName") or fmp.get("exchange"),
@@ -162,29 +185,27 @@ if symbol:
                             "description": fmp.get("description"),
                         }
                         for k, v in fields.items():
-                            st.write(f"**{k}:** {v or '-'}")
-                    else:
-                        st.caption("(FMP profile unavailable)")
+                            if v not in (None, "", "None"):
+                                st.write(f"**{k}:** {v}")
+                else:
+                    with cols[1]:
+                        st.subheader("Source: FMP")
+                        st.caption("(Profile unavailable)")
 
     # -------- News Tab --------
     with tabs[2]:
         with st.spinner("Fetching recent news..."):
+            resolved = resolve_yf_symbol(symbol) or symbol
             today = dt.date.today()
             start = today - dt.timedelta(days=14)
 
-            news = finnhub_company_news(symbol, start.isoformat(), today.isoformat())
+            news = finnhub_company_news(symbol, start.isoformat(), today.isoformat())  # if you gate by supports_finnhub, keep it
+            # if empty and you added FMP fallback, call that here with `resolved`
             if not news:
-                sym = resolve_yf_symbol(symbol) or symbol
-                news = stock_news_fmp(sym)  # FMP fallback
-
-            if not news:
-                st.info("No recent news (provider limits/exchange coverage).")
+                st.info("No recent company news (provider limits/exchange coverage).")
             else:
                 for item in news:
-                    title = item.get("headline") or item.get("title") or "(no headline)"
-                    with st.expander(title):
-                        summary = item.get("summary") or item.get("text") or "(no summary)"
-                        url = item.get("url") or item.get("link")
-                        st.write(summary)
-                        if url:
-                            st.link_button("Read source", url)
+                    with st.expander(item.get("headline", "(no headline)")):
+                        st.write(item.get("summary") or "(no summary)")
+                        if item.get("url"):
+                            st.link_button("Read source", item["url"])
