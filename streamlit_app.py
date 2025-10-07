@@ -9,7 +9,14 @@ from app.services import (
     get_fast_info,
     finnhub_company_profile,
     finnhub_company_news,
+    # ADD:
+    search_symbol_yahoo,
+    resolve_yf_symbol,
+    supports_finnhub,
+    search_symbol_fmp,
+    company_profile_fmp, quote_short_fmp, stock_news_fmp
 )
+
 from app.ui import price_chart, kpi_row
 from app.utils import get_logger, get_secrets
 
@@ -39,28 +46,39 @@ results = []
 if q:
     with st.spinner("Searching symbols..."):
         results = search_symbol_alpha(q)
+        if not results:  # Fallback to FMP
+            results = search_symbol_fmp(q)
+        if not results:  # Fallback to Yahoo
+            yahoo = search_symbol_yahoo(q)
+            results = [{
+                "1. symbol": (it.get("symbol") or "").upper(),
+                "2. name": it.get("shortname") or it.get("longname") or "",
+                "4. region": it.get("exchDisp") or "",
+            } for it in yahoo if it.get("symbol")]
+
 
 col_left, col_right = st.columns([2, 1])
 
 with col_left:
     if results:
-        # Render search results as a selectbox of "SYM — Name (Region)"
-        options = []
-        sym_map = {}
-        for m in results:
-            sym = m.get("1. symbol", "").upper()
-            name = m.get("2. name", "")
-            region = m.get("4. region", "")
-            label = f"{sym} — {name} ({region})"
-            options.append(label)
-            sym_map[label] = sym
-        choice = st.selectbox("Select a match", options)
-        symbol = sym_map.get(choice)
+        # Filter to symbols that actually have Yahoo price data
+        options, sym_map = [], {}
+        for m in results or []:
+            raw_sym = (m.get("1. symbol") or "").upper()
+            if resolve_yf_symbol(raw_sym):
+                label = f"{raw_sym} — {m.get('2. name','')} ({m.get('4. region','')})"
+                options.append(label); sym_map[label] = raw_sym  # keep the raw symbol for Alpha/Finnhub; we'll resolve for yfinance later
+
+        if options:
+            choice = st.selectbox("Select a match", options)
+            symbol = sym_map.get(choice)
+        else:
+            symbol = None
+            st.warning("No symbols with valid price data were found. Try another query.")
     else:
         symbol = None
         if q:
-            st.warning("No results from Alpha Vantage. Check your key/rate limit or try a different query.")
-
+            st.warning("No results from Alpha Vantage/Yahoo. Check your key/rate limit or try a different query.")
 
 with col_right:
     st.subheader("Watchlist")
@@ -77,96 +95,96 @@ if symbol:
 
     # -------- Overview Tab --------
     with tabs[0]:
-        df = get_history_yf(symbol, period=period, interval=interval)
-        fast = get_fast_info(symbol)
+        with st.spinner("Loading overview..."):
+            df = get_history_yf(symbol, period=period, interval=interval)
+            fast = get_fast_info(symbol)
 
-        # after df/fast are fetched
-        try:
-            from app.services import resolve_yf_symbol
-            resolved = resolve_yf_symbol(symbol)
-            if resolved and resolved != symbol:
-                st.caption(f"Resolved Yahoo symbol: **{resolved}**")
-        except Exception:
-            pass
+            last_price = fast.get("last_price") if fast else (df["Close"].iloc[-1] if not df.empty else None)
+            prev_close = fast.get("previous_close") if fast else (df["Close"].iloc[-2] if len(df) > 1 else None)
+            change = None
+            if last_price is not None and prev_close not in (None, 0):
+                change = ((last_price - prev_close) / prev_close) * 100
 
-        last_price = fast.get("last_price") if fast else (df["Close"].iloc[-1] if not df.empty else None)
-        prev_close = fast.get("previous_close") if fast else (df["Close"].iloc[-2] if len(df) > 1 else None)
-        change = None
-        if last_price is not None and prev_close not in (None, 0):
-            change = ((last_price - prev_close) / prev_close) * 100
+            mcap = fast.get("market_cap", None)
+            kpi_row(last_price, change, mcap)
+            price_chart(df, symbol)
 
-        mcap = fast.get("market_cap", None)
-        kpi_row(last_price, change, mcap)
-        price_chart(df, symbol)
+            # Show which Yahoo ticker was used
+            try:
+                resolved = resolve_yf_symbol(symbol)
+                if resolved and resolved != symbol:
+                    st.caption(f"Resolved Yahoo symbol: **{resolved}**")
+            except Exception:
+                pass
 
-        add_col1, add_col2 = st.columns(2)
-        with add_col1:
-            if st.button("➕ Add to watchlist"):
-                if symbol not in st.session_state.watchlist:
-                    st.session_state.watchlist.append(symbol)
-                    st.success(f"Added {symbol} to watchlist")
-                    st.balloons()
-        with add_col2:
-            if not df.empty:
-                csv = df.to_csv(index=False).encode("utf-8")
-                st.download_button("⬇️ Download price CSV", csv, file_name=f"{symbol}_{period}_{interval}.csv", mime="text/csv")
+            add_col1, add_col2 = st.columns(2)
+            with add_col1:
+                if st.button("➕ Add to watchlist"):
+                    if symbol not in st.session_state.watchlist:
+                        st.session_state.watchlist.append(symbol)
+                        st.success(f"Added {symbol} to watchlist")
+                        st.balloons()
+            with add_col2:
+                if not df.empty:
+                    csv = df.to_csv(index=False).encode("utf-8")
+                    st.download_button("⬇️ Download price CSV", csv, file_name=f"{symbol}_{period}_{interval}.csv", mime="text/csv")
 
     # -------- Fundamentals Tab --------
     with tabs[1]:
-        ov = company_overview_alpha(symbol)
-        prof = finnhub_company_profile(symbol)
-        if not ov and not prof:
-            st.info("No fundamentals available (check API keys or rate limits).")
-        else:
-            colA, colB = st.columns(2)
-            with colA:
-                st.subheader("Alpha Vantage — Company Overview")
-                if ov:
-                    fields = [
-                        ("Name", ov.get("Name")),
-                        ("Sector", ov.get("Sector")),
-                        ("Industry", ov.get("Industry")),
-                        ("MarketCapitalization", ov.get("MarketCapitalization")),
-                        ("DividendYield", ov.get("DividendYield")),
-                        ("PERatio", ov.get("PERatio")),
-                        ("EPS", ov.get("EPS")),
-                        ("ProfitMargin", ov.get("ProfitMargin")),
-                        ("ReturnOnEquityTTM", ov.get("ReturnOnEquityTTM")),
-                    ]
-                    for k, v in fields:
-                        st.write(f"**{k}:** {v if v not in (None, '', 'None') else '-'}")
-                else:
-                    st.caption("(No Alpha Vantage overview or rate-limited)")
-            with colB:
-                st.subheader("Finnhub — Company Profile")
-                if prof:
-                    f_fields = [
-                        ("Name", prof.get("name")),
-                        ("Exchange", prof.get("exchange")),
-                        ("IPO", prof.get("ipo")),
-                        ("Market Cap", prof.get("marketCapitalization")),
-                        ("Web", prof.get("weburl")),
-                        ("Country", prof.get("country")),
-                        ("Currency", prof.get("currency")),
-                    ]
-                    for k, v in f_fields:
-                        st.write(f"**{k}:** {v if v not in (None, '', 'None') else '-'}")
-                else:
-                    st.caption("(No Finnhub profile or key missing)")
+        with st.spinner("Loading fundamentals..."):
+            ov  = company_overview_alpha(symbol)         # Alpha Vantage (may be empty/rate-limited)
+            fmp = company_profile_fmp(symbol)            # FMP fallback/primary
+
+            if not ov and not fmp:
+                st.info("No fundamentals available for this symbol (provider limits/exchange coverage).")
+            else:
+                colA, colB = st.columns(2)
+
+                with colA:
+                    st.subheader("Funder: Alpha Vantage — Company Overview")
+                    if ov:
+                        for k in ("Name","Sector","Industry","MarketCapitalization","DividendYield","PERatio","EPS","ProfitMargin","ReturnOnEquityTTM"):
+                            st.write(f"**{k}:** {ov.get(k) or '-'}")
+                    else:
+                        st.caption("(Alpha Vantage unavailable)")
+
+                with colB:
+                    st.subheader("Funder: FMP — Company Profile")
+                    if fmp:
+                        fields = {
+                            "companyName": fmp.get("companyName"),
+                            "exchange": fmp.get("exchangeFullName") or fmp.get("exchange"),
+                            "industry": fmp.get("industry"),
+                            "sector": fmp.get("sector"),
+                            "mktCap": fmp.get("marketCap") or fmp.get("mktCap"),
+                            "currency": fmp.get("currency"),
+                            "website": fmp.get("website"),
+                            "description": fmp.get("description"),
+                        }
+                        for k, v in fields.items():
+                            st.write(f"**{k}:** {v or '-'}")
+                    else:
+                        st.caption("(FMP profile unavailable)")
 
     # -------- News Tab --------
     with tabs[2]:
-        today = dt.date.today()
-        start = today - dt.timedelta(days=14)
-        news = finnhub_company_news(symbol, start.isoformat(), today.isoformat())
-        if not news:
-            st.info("No recent company news (or API rate-limited).")
-        else:
-            for item in news:
-                with st.expander(item.get("headline", "(no headline)")):
-                    ts = item.get("datetime")
-                    summary = item.get("summary") or "(no summary)"
-                    url = item.get("url")
-                    st.write(summary)
-                    if url:
-                        st.link_button("Read source", url)
+        with st.spinner("Fetching recent news..."):
+            today = dt.date.today()
+            start = today - dt.timedelta(days=14)
+
+            news = finnhub_company_news(symbol, start.isoformat(), today.isoformat())
+            if not news:
+                sym = resolve_yf_symbol(symbol) or symbol
+                news = stock_news_fmp(sym)  # FMP fallback
+
+            if not news:
+                st.info("No recent news (provider limits/exchange coverage).")
+            else:
+                for item in news:
+                    title = item.get("headline") or item.get("title") or "(no headline)"
+                    with st.expander(title):
+                        summary = item.get("summary") or item.get("text") or "(no summary)"
+                        url = item.get("url") or item.get("link")
+                        st.write(summary)
+                        if url:
+                            st.link_button("Read source", url)

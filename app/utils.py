@@ -31,6 +31,7 @@ def get_secrets() -> Dict[str, Any]:
     return {
         "ALPHA_VANTAGE_KEY": st.secrets.get("ALPHA_VANTAGE_KEY", ""),
         "FINNHUB_KEY": st.secrets.get("FINNHUB_KEY", ""),
+        "FMP_KEY": st.secrets.get("FMP_KEY", ""),
         "OFFLINE_MODE": str(st.secrets.get("OFFLINE_MODE", "false")).lower() == "true",
     }
 
