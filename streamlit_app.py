@@ -27,21 +27,34 @@ st.set_page_config(page_title="Stock Mini Terminal", page_icon="📈", layout="w
 
 if st.session_state.get("flash_msg"):
     st.toast(st.session_state.pop("flash_msg"))
-    
-def add_to_watchlist(sym: str):
-    wl = st.session_state.get("watchlist", [])
-    if sym and sym not in wl:
-        wl = wl + [sym]           # avoid in-place mutation edge cases
-        st.session_state.watchlist = wl
-        st.session_state["flash_msg"] = f"Added {sym} to watchlist"
-    st.rerun()  # immediately rerun so the watchlist above updates
 
 # --------------- Sidebar ---------------
 st.sidebar.image("assets/placeholder.png", width="stretch")
 st.sidebar.header("Settings")
 period = st.sidebar.selectbox("Period", ["1mo", "3mo", "6mo", "1y", "2y", "5y", "max"], index=3)
 interval = st.sidebar.selectbox("Interval", ["1d", "1wk", "1mo"], index=0)
+st.sidebar.markdown("### Connect")
 
+# --- Social icons row (centered) ---
+i1, i2, i3 = st.sidebar.columns(3)
+with i1:
+    st.markdown(
+        '<a href="https://www.linkedin.com/in/brejesh-balakrishnan-7855051b9/" target="_blank">'
+        '<img src="https://upload.wikimedia.org/wikipedia/commons/8/81/LinkedIn_icon.svg" width="28" alt="LinkedIn"/></a>',
+        unsafe_allow_html=True,
+    )
+with i2:
+    st.markdown(
+        '<a href="https://github.com/brej-29" target="_blank">'
+        '<img src="https://cdn.simpleicons.org/github/ffffff" width="28" alt="GitHub"/></a>',
+        unsafe_allow_html=True,
+    )
+with i3:
+    st.markdown(
+        '<a href="https://share.streamlit.io/user/brej-29" target="_blank">'
+        '<img src="https://cdn.simpleicons.org/streamlit/FF4B4B" width="28" alt="Streamlit"/></a>',
+        unsafe_allow_html=True,
+    )
 # Watchlist stored in session_state
 if "watchlist" not in st.session_state:
     st.session_state.watchlist = []
@@ -55,17 +68,21 @@ q = st.text_input("🔎 Search by company name or symbol", value="", placeholder
 
 results = []
 if q:
-    with st.spinner("Searching symbols..."):
-        results = search_symbol_alpha(q)
-        if not results:  # Fallback to FMP
-            results = search_symbol_fmp(q)
-        if not results:  # Fallback to Yahoo
-            yahoo = search_symbol_yahoo(q)
+    with st.spinner("Searching (Yahoo → FMP → Alpha)…"):
+        # Yahoo first (fast/keyless). If DNS fails, function returns [] quickly.
+        yahoo = search_symbol_yahoo(q)
+        if yahoo:
             results = [{
                 "1. symbol": (it.get("symbol") or "").upper(),
                 "2. name": it.get("shortname") or it.get("longname") or "",
                 "4. region": it.get("exchDisp") or "",
             } for it in yahoo if it.get("symbol")]
+
+        if not results:
+            results = search_symbol_fmp(q)     # requires FMP_KEY
+
+        if not results:
+            results = search_symbol_alpha(q)   # last resort; often rate-limited
 
 
 col_left, col_right = st.columns([2, 1])
@@ -95,8 +112,10 @@ with col_right:
     st.subheader("Watchlist")
     if st.session_state.watchlist:
         st.write(", ".join(st.session_state.watchlist))
-        if st.button("Clear watchlist"):
+        if st.sidebar.button("🧹 Clear watchlist"):
             st.session_state.watchlist = []
+            st.toast("Watchlist cleared")
+            st.rerun()
     else:
         st.write("(empty)")
 
@@ -127,12 +146,13 @@ if symbol:
 
             c1, c2 = st.columns(2)
             with c1:
-                st.button(
-                    "➕ Add to watchlist",
-                    key=f"add_{symbol}",
-                    on_click=add_to_watchlist,
-                    args=(symbol,),
-                )
+                clicked = st.button("➕ Add to watchlist", key=f"add_{symbol}")
+                if clicked:
+                    wl = st.session_state.get("watchlist", [])
+                    if symbol and symbol not in wl:
+                        st.session_state.watchlist = wl + [symbol]  # avoid in-place mutation edge cases
+                        st.session_state["flash_msg"] = f"Added {symbol} to watchlist"
+                    st.rerun()  # works here (not inside a callback)
             with c2:
                 if not df.empty:
                     st.download_button(
@@ -209,3 +229,7 @@ if symbol:
                         st.write(item.get("summary") or "(no summary)")
                         if item.get("url"):
                             st.link_button("Read source", item["url"])
+
+
+if st.session_state.get("flash_msg"):
+    st.toast(st.session_state.pop("flash_msg"))

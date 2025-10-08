@@ -5,8 +5,10 @@ import pandas as pd
 import yfinance as yf
 from dateutil import tz
 from app.utils import get_logger, get_secrets
-from typing import Tuple
 from typing import List, Dict, Optional
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+from requests.exceptions import RequestException, ReadTimeout, ConnectTimeout
 
 logger = get_logger()
 secrets = get_secrets()
@@ -15,27 +17,53 @@ FMP_URL = "https://financialmodelingprep.com"
 ALPHA_URL = "https://www.alphavantage.co/query"
 FINNHUB_URL = "https://finnhub.io/api/v1"
 
-def fmp_get(path: str, params: Dict | None = None) -> dict | list:
+# shared session with retry/backoff
+_session = None
+def http_session():
+    global _session
+    if _session is None:
+        s = requests.Session()
+        s.headers.update({
+            # Yahoo often blocks requests without a browser UA
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/120.0.0.0 Safari/537.36"
+        })
+        retry = Retry(
+            total=2, connect=2, read=2,
+            backoff_factor=0.6,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=("GET",),
+            raise_on_status=False,
+        )
+        s.mount("https://", HTTPAdapter(max_retries=retry))
+        s.mount("http://", HTTPAdapter(max_retries=retry))
+        _session = s
+    return _session
+
+def fmp_get(path: str, params: Dict | None = None):
     if params is None:
         params = {}
     key = secrets.get("FMP_KEY", "")
-    if key:
-        params = {**params, "apikey": key}
-    else:
+    if not key:
         logger.warning("FMP_KEY missing: skipping FMP request to %s", path)
-    r = requests.get(f"{FMP_URL}{path}", params=params, timeout=20)
+        return []
+    params = {**params, "apikey": key}
     try:
+        r = http_session().get(f"{FMP_URL}{path}", params=params, timeout=(5, 8))  # (connect, read)
         r.raise_for_status()
-    except requests.HTTPError as e:
-        logger.error("FMP HTTP %s for %s | url=%s", r.status_code, path, r.url)
-        raise
-    return r.json()
+        return r.json()
+    except (ReadTimeout, ConnectTimeout):
+        logger.warning("FMP request timed out: %s | params=%s", path, params)
+        return []      # fail open so Yahoo/Alpha can handle
+    except RequestException as e:
+        logger.warning("FMP request error: %s | url=%s", e, r.url if 'r' in locals() else path)
+        return []
 
 # -------- FMP: search / profile / quote / news --------
 def search_symbol_fmp(query: str) -> List[Dict]:
     try:
         data = fmp_get("/stable/search-symbol", {"query": query})
-        # Normalize to Alpha-like fields so the rest of the app can reuse UI
         out = []
         for it in data or []:
             out.append({
@@ -87,17 +115,22 @@ def stock_news_fmp(symbol: str, page: int = 0) -> List[Dict]:
 
 # -------- Yahoo keyless search fallback (already suggested earlier) --------
 def search_symbol_yahoo(query: str) -> list[dict]:
-    try:
-        r = requests.get(
-            "https://query1.finance.yahoo.com/v1/finance/search",
-            params={"q": query, "quotesCount": 10, "newsCount": 0},
-            timeout=15,
-        )
-        if r.status_code == 200:
-            return r.json().get("quotes", [])
-    except Exception:
-        logger.exception("Yahoo search failed")
-    return []
+    hosts = [
+        "https://query1.finance.yahoo.com",
+        "https://query2.finance.yahoo.com",  # fallback host
+    ]
+    params = {"q": query, "quotesCount": 10, "newsCount": 0}
+    for base in hosts:
+        try:
+            r = http_session().get(f"{base}/v1/finance/search", params=params, timeout=(5, 8))
+            if r.status_code == 200:
+                j = r.json() or {}
+                return j.get("quotes", [])
+        except Exception:
+            # DNS failures / 403 / timeouts → try next host
+            logger.warning("Yahoo search failed via %s", base, exc_info=True)
+            continue
+    return []  # fail open so we can use other providers
 
 def resolve_symbol_variants(raw: str) -> list[str]:
     s = (raw or "").upper()
