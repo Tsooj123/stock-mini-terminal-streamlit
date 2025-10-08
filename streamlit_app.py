@@ -25,14 +25,48 @@ secrets = get_secrets()
 
 st.set_page_config(page_title="Stock Mini Terminal", page_icon="📈", layout="wide")
 
+def _apply_theme(choice: str):
+    if choice == "Dark":
+        st.markdown("""
+            <style>
+              :root { --bg: #0e1117; --panel: #262730; --text: #fafafa; --muted:#a3a3a3; }
+              .stApp { background: var(--bg); color: var(--text); }
+              .stMarkdown, .stText, .stCaption, p, span, label { color: var(--text) !important; }
+              section[data-testid="stSidebar"] { background: var(--panel); }
+            </style>
+        """, unsafe_allow_html=True)
+    elif choice == "Light":
+        st.markdown("""
+            <style>
+              :root { --bg:#ffffff; --panel:#f5f6fa; --text:#111827; --muted:#4b5563; }
+              .stApp { background: var(--bg); color: var(--text); }
+              .stMarkdown, .stText, .stCaption, p, span, label { color: var(--text) !important; }
+              section[data-testid="stSidebar"] { background: var(--panel); }
+            </style>
+        """, unsafe_allow_html=True)
+    # "System" → no CSS injection (let Streamlit's native theme handle it)
+
+_apply_theme(st.session_state.get("_theme_choice","System"))
+
 if st.session_state.get("flash_msg"):
     st.toast(st.session_state.pop("flash_msg"))
 
 # --------------- Sidebar ---------------
 st.sidebar.image("assets/placeholder.png", width="stretch")
-st.sidebar.header("Settings")
+st.sidebar.markdown(
+    """
+    <h1 style='color: #008B8B; font-size: 36px;'>Settings</h1>
+    """, 
+    unsafe_allow_html=True
+)
 period = st.sidebar.selectbox("Period", ["1mo", "3mo", "6mo", "1y", "2y", "5y", "max"], index=3)
 interval = st.sidebar.selectbox("Interval", ["1d", "1wk", "1mo"], index=0)
+
+# Sidebar theme toggle (persist in session)
+theme_choice = st.sidebar.radio("Theme", ["Light", "Dark"], index=0, horizontal=True)
+st.session_state["_theme_choice"] = theme_choice
+
+
 st.sidebar.markdown("### Connect")
 
 # --- Social icons row (centered) ---
@@ -46,7 +80,7 @@ with i1:
 with i2:
     st.markdown(
         '<a href="https://github.com/brej-29" target="_blank">'
-        '<img src="https://cdn.simpleicons.org/github/ffffff" width="28" alt="GitHub"/></a>',
+        '<img src="https://cdn.simpleicons.org/github/898989" width="28" alt="GitHub"/></a>',
         unsafe_allow_html=True,
     )
 with i3:
@@ -139,7 +173,7 @@ if symbol:
             mcap = fast.get("market_cap")
 
             kpi_row(last_price, change, mcap, currency)  # <-- pass currency now
-            price_chart(df, resolved)
+            price_chart(df, symbol, st.session_state.get("_theme_choice","System"))
 
             if resolved != symbol:
                 st.caption(f"Resolved Yahoo symbol: **{resolved}**")
