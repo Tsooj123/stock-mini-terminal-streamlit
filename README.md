@@ -187,8 +187,8 @@ For questions or feedback, reach out on:
 ---
 
 ## **References**
-- Streamlit `secrets.toml` & `st.secrets` docs. :contentReference[oaicite:20]{index=20}
-- Alpha Vantage API (overview/search). :contentReference[oaicite:21]{index=21}
-- Finnhub API (profile/news). :contentReference[oaicite:22]{index=22}
-- yfinance reference (Ticker/history/usage). :contentReference[oaicite:23]{index=23}
-- Financial Modeling Prep (Company Profile / developer docs). :contentReference[oaicite:24]{index=24}
+- Streamlit `secrets.toml` & `st.secrets`
+- Alpha Vantage API (overview/search).
+- Finnhub API (profile/news).
+- yfinance reference (Ticker/history/usage).
+- Financial Modeling Prep (Company Profile / developer docs).
