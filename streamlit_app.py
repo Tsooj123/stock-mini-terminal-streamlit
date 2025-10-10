@@ -1,5 +1,6 @@
 import datetime as dt
-import pandas as pd
+import os
+import toml
 import streamlit as st
 
 from app.services import (
@@ -25,28 +26,6 @@ secrets = get_secrets()
 
 st.set_page_config(page_title="Stock Mini Terminal", page_icon="📈", layout="wide")
 
-def _apply_theme(choice: str):
-    if choice == "Dark":
-        st.markdown("""
-            <style>
-              :root { --bg: #0e1117; --panel: #262730; --text: #fafafa; --muted:#a3a3a3; }
-              .stApp { background: var(--bg); color: var(--text); }
-              .stMarkdown, .stText, .stCaption, p, span, label { color: var(--text) !important; }
-              section[data-testid="stSidebar"] { background: var(--panel); }
-            </style>
-        """, unsafe_allow_html=True)
-    elif choice == "Light":
-        st.markdown("""
-            <style>
-              :root { --bg:#ffffff; --panel:#f5f6fa; --text:#111827; --muted:#4b5563; }
-              .stApp { background: var(--bg); color: var(--text); }
-              .stMarkdown, .stText, .stCaption, p, span, label { color: var(--text) !important; }
-              section[data-testid="stSidebar"] { background: var(--panel); }
-            </style>
-        """, unsafe_allow_html=True)
-    # "System" → no CSS injection (let Streamlit's native theme handle it)
-
-_apply_theme(st.session_state.get("_theme_choice","System"))
 
 if st.session_state.get("flash_msg"):
     st.toast(st.session_state.pop("flash_msg"))
@@ -63,8 +42,14 @@ period = st.sidebar.selectbox("Period", ["1mo", "3mo", "6mo", "1y", "2y", "5y", 
 interval = st.sidebar.selectbox("Interval", ["1d", "1wk", "1mo"], index=0)
 
 # Sidebar theme toggle (persist in session)
-theme_choice = st.sidebar.radio("Theme", ["Light", "Dark"], index=0, horizontal=True)
-st.session_state["_theme_choice"] = theme_choice
+
+toggle_dark = st.sidebar.toggle("Dark Mode", value=True)
+if st.get_option("theme.base") == "light" and toggle_dark:
+    st._config.set_option("theme.base", "dark")  # type: ignore # noqa: SLF001
+    st.rerun()
+elif st.get_option("theme.base") == "dark" and not toggle_dark:
+    st._config.set_option("theme.base", "light")  # type: ignore # noqa: SLF001
+    st.rerun()
 
 
 st.sidebar.markdown("### Connect")
@@ -173,7 +158,7 @@ if symbol:
             mcap = fast.get("market_cap")
 
             kpi_row(last_price, change, mcap, currency)  # <-- pass currency now
-            price_chart(df, symbol, st.session_state.get("_theme_choice","System"))
+            price_chart(df, symbol)
 
             if resolved != symbol:
                 st.caption(f"Resolved Yahoo symbol: **{resolved}**")

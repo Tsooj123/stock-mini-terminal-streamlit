@@ -16,29 +16,38 @@ def kpi_row(price: float | None, change: float | None, mcap: float | None, curre
         st.metric("52W Range", "see Fundamentals tab →")
 
 
-def themed_altair(chart, dark: bool):
-    if dark:
-        return (chart
-            .configure(background='#0e1117')
-            .configure_axis(labelColor='#fafafa', titleColor='#fafafa', gridColor='#3a3a3a')
-            .configure_legend(labelColor='#fafafa', titleColor='#fafafa')
-            .configure_title(color='#fafafa')
-        )
-    else:
-        return (chart
-            .configure(background='white')
-            .configure_axis(labelColor='#111827', titleColor='#111827', gridColor='#e5e7eb')
-            .configure_legend(labelColor='#111827', titleColor='#111827')
-            .configure_title(color='#111827')
-        )
+def themed_altair(chart: alt.Chart) -> alt.Chart:
+    # Read current theme settings provided by Streamlit
+    base = (st.get_option("theme.base") or "dark").lower()                 # "dark" | "light"
+    bg   = st.get_option("theme.backgroundColor") or ("#22272E" if base == "dark" else "#FFFFFF")
+    txt  = st.get_option("theme.textColor")        or ("#768390" if base == "dark" else "#111827")
+
+    # Choose a reasonable grid/border color (not exposed directly by Streamlit)
+    grid = "#3a3a3a" if base == "dark" else "#e5e7eb"
+
+    return (
+        chart
+        .configure(background=bg)
+        .configure_axis(labelColor=txt, titleColor=txt, gridColor=grid)
+        .configure_legend(labelColor=txt, titleColor=txt)
+        .configure_title(color=txt)
+    )
 
 # usage in app/ui.py
-def price_chart(df: pd.DataFrame, symbol: str, theme_choice: str):
+def price_chart(df: pd.DataFrame, symbol: str):
     if df.empty:
         st.info("No price data available.")
         return
-    base = alt.Chart(df, title=f"{symbol} — Adjusted Close").mark_line().encode(
-        x="Date:T", y=alt.Y("Close:Q", title="Close")
-    ).properties(height=280)
-    dark = (theme_choice == "Dark")
-    st.altair_chart(themed_altair(base, dark), use_container_width=True)
+
+    base_chart = (
+        alt.Chart(df, title=f"{symbol} — Adjusted Close")
+        .mark_line()
+        .encode(
+            x="Date:T",
+            y=alt.Y("Close:Q", title="Close")
+        )
+        .properties(height=280)
+    )
+
+    themed = themed_altair(base_chart)
+    st.altair_chart(themed, use_container_width=True)
