@@ -6,8 +6,8 @@
 <br>
 
 <div align="center">
-  <a href="https://github.com/YOUR-USERNAME/stock-mini-terminal-streamlit">
-    <img alt="Last Commit" src="https://img.shields.io/github/last-commit/YOUR-USERNAME/stock-mini-terminal-streamlit">
+  <a href="https://github.com/brej-29/stock-mini-terminal-streamlit">
+    <img alt="Last Commit" src="https://img.shields.io/github/last-commit/brej-29/stock-mini-terminal-streamlit">
   </a>
   <img alt="Language" src="https://img.shields.io/badge/Language-Python-blue">
   <img alt="Framework" src="https://img.shields.io/badge/Framework-Streamlit-ff4b4b">
